@@ -168,93 +168,55 @@
   }
 
   async function extractPersonLinkedInUrl() {
-    // Extract lead ID from current URL: /sales/lead/ACwAABuumtoBUo...,NAME_SEARCH,...
-    const url = window.location.href;
-    const leadMatch = url.match(/\/sales\/lead\/([^,?]+)/);
-    if (!leadMatch) return { linkedinUrl: '' };
+    const wait = ms => new Promise(r => setTimeout(r, ms));
 
-    const leadId = leadMatch[1];
-
-    // Try clicking the three-dot overflow menu to get "Copy LinkedIn.com URL"
+    // Click three-dot menu
     const overflowBtn = document.querySelector(
       'button[data-x--lead-actions-bar-overflow-menu]'
     );
+    if (!overflowBtn) {
+      console.log('[LI-Extractor] No overflow menu found');
+      return { linkedinUrl: '' };
+    }
 
-    if (overflowBtn) {
-      overflowBtn.click();
-      // Wait for menu to render
-      await new Promise(r => setTimeout(r, 800));
+    overflowBtn.click();
+    await wait(1000);
 
-      // Look for "Copy LinkedIn.com URL" or similar menu item
-      const menuItems = document.querySelectorAll(
-        '[id^="hue-menu-ember"] button, [id^="hue-menu-ember"] a, [role="menuitem"]'
-      );
-      for (const item of menuItems) {
-        const text = item.textContent?.toLowerCase() || '';
-        if (text.includes('copy linkedin') || text.includes('linkedin.com url') || text.includes('copy profile')) {
-          item.click();
-          await new Promise(r => setTimeout(r, 500));
-
-          // Read from clipboard
-          try {
-            const clipText = await navigator.clipboard.readText();
-            if (clipText?.includes('linkedin.com/in/')) {
-              // Close menu
-              overflowBtn.click();
-              return { linkedinUrl: clipText.trim() };
-            }
-          } catch (e) {
-            console.log('[LI-Extractor] Clipboard read failed:', e.message);
-          }
-        }
+    // Find "View LinkedIn profile" link in the menu
+    const menuItems = document.querySelectorAll(
+      '[id^="hue-menu-ember"] a, [id^="hue-menu-ember"] button, [role="menuitem"]'
+    );
+    let viewProfileLink = null;
+    for (const item of menuItems) {
+      const text = item.textContent?.toLowerCase() || '';
+      if (text.includes('view linkedin') || text.includes('view profile') || text.includes('linkedin profile')) {
+        viewProfileLink = item;
+        break;
       }
-      // Close menu if still open
+    }
+
+    if (!viewProfileLink) {
+      console.log('[LI-Extractor] No "View LinkedIn profile" menu item found');
       document.body.click();
-      await new Promise(r => setTimeout(r, 200));
+      return { linkedinUrl: '' };
     }
 
-    // Fallback: try the Sales Navigator API
-    const csrfToken = document.cookie
-      .split('; ')
-      .find(c => c.startsWith('JSESSIONID='))
-      ?.split('=')
-      ?.slice(1)
-      ?.join('=')
-      ?.replace(/"/g, '');
-
-    const headers = {
-      'accept': 'application/json',
-      'x-restli-protocol-version': '2.0.0',
-    };
-    if (csrfToken) headers['csrf-token'] = csrfToken;
-
-    try {
-      const apiUrl = `https://www.linkedin.com/sales-api/salesApiProfiles/(profileId:${leadId})?decoration=%28flagshipProfileUrl%29`;
-      console.log('[LI-Extractor] Fetching profile URL:', apiUrl);
-      const resp = await fetch(apiUrl, { headers, credentials: 'include' });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.flagshipProfileUrl) {
-          return { linkedinUrl: data.flagshipProfileUrl };
-        }
-      }
-    } catch (e) {
-      console.log('[LI-Extractor] Profile API failed:', e.message);
+    // Get the href directly if it's an <a> tag
+    const href = viewProfileLink.getAttribute('href') || '';
+    if (href && href.includes('/in/')) {
+      const fullUrl = href.startsWith('http') ? href : 'https://www.linkedin.com' + href;
+      // Clean URL — remove query params
+      const cleanUrl = fullUrl.split('?')[0];
+      console.log('[LI-Extractor] Got profile URL from href:', cleanUrl);
+      document.body.click();
+      return { linkedinUrl: cleanUrl };
     }
 
-    // Fallback: try another API pattern
-    try {
-      const apiUrl2 = `https://www.linkedin.com/sales-api/salesApiLeadLookup?q=leadId&leadId=${leadId}&decoration=%28flagshipProfileUrl%29`;
-      const resp2 = await fetch(apiUrl2, { headers, credentials: 'include' });
-      if (resp2.ok) {
-        const data2 = await resp2.json();
-        const profileUrl = data2.flagshipProfileUrl || data2.elements?.[0]?.flagshipProfileUrl;
-        if (profileUrl) return { linkedinUrl: profileUrl };
-      }
-    } catch (e) {
-      console.log('[LI-Extractor] Lead lookup API failed:', e.message);
-    }
-
+    // If no href, click it and grab the URL from the new tab/page
+    // The link has target="_blank" so it opens in a new tab
+    // Instead, read the href after the menu renders fully
+    console.log('[LI-Extractor] Menu item HTML:', viewProfileLink.outerHTML);
+    document.body.click();
     return { linkedinUrl: '' };
   }
 
