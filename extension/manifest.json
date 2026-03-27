@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Sales Navigator Extractor",
+  "version": "1.0.0",
+  "description": "Extract company and decision maker data from LinkedIn Sales Navigator",
+  "permissions": [
+    "activeTab",
+    "sidePanel",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/sales/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/sales/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Open LinkedIn Extractor"
+  }
+}

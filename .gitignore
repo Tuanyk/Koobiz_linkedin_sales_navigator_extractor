@@ -1,0 +1,21 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
+
+# Data files (large HTML samples)
+data/
+
+# Node
+node_modules/
+
+# Packed extension
+*.crx
+*.pem
+*.zip
