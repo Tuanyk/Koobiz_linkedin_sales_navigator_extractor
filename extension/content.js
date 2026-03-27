@@ -11,15 +11,18 @@
       CLICK_DECISION_MAKERS_LINK: clickDecisionMakersLink,
       CLICK_NEXT_PAGE: clickNextPage,
       GET_PAGE_INFO: getPageInfo,
+      RESOLVE_LOCATION: resolveLocation,
     };
 
     const handler = handlers[message.action];
     if (handler) {
-      try {
-        const result = handler(message);
+      const result = handler(message);
+      if (result instanceof Promise) {
+        result
+          .then(data => sendResponse({ ok: true, data }))
+          .catch(e => sendResponse({ ok: false, error: e.message }));
+      } else {
         sendResponse({ ok: true, data: result });
-      } catch (e) {
-        sendResponse({ ok: false, error: e.message });
       }
     }
     return true;
@@ -216,5 +219,60 @@
     else if (url.includes('/sales/lead/')) pageType = 'person_profile';
 
     return { url, pageType };
+  }
+
+  async function resolveLocation(message) {
+    const query = message.locationName;
+    if (!query) throw new Error('No location name provided');
+
+    // Get CSRF token from cookie
+    const csrfToken = document.cookie
+      .split('; ')
+      .find(c => c.startsWith('JSESSIONID='))
+      ?.split('=')[1]
+      ?.replace(/"/g, '');
+
+    const headers = {
+      'accept': 'application/json',
+      'x-restli-protocol-version': '2.0.0',
+    };
+    if (csrfToken) {
+      headers['csrf-token'] = csrfToken;
+    }
+
+    // Try Sales Navigator typeahead API
+    const url = `https://www.linkedin.com/sales-api/salesApiTypeahead?q=typeahead&query=${encodeURIComponent(query)}&type=REGION`;
+
+    const resp = await fetch(url, { headers, credentials: 'include' });
+
+    if (!resp.ok) {
+      // Fallback: try the regular LinkedIn API
+      const fallbackUrl = `https://www.linkedin.com/voyager/api/typeahead/hitsV2?keywords=${encodeURIComponent(query)}&origin=GLOBAL_SEARCH_HEADER&q=blended&type=GEO`;
+      const resp2 = await fetch(fallbackUrl, { headers, credentials: 'include' });
+      if (!resp2.ok) throw new Error(`API returned ${resp2.status}`);
+
+      const data2 = await resp2.json();
+      const elements = data2.elements || data2.included || [];
+      for (const el of elements) {
+        const text = el.text?.text || el.title?.text || el.name || '';
+        const id = el.targetUrn?.split(':')?.pop() || el.objectUrn?.split(':')?.pop() || '';
+        if (text && id) {
+          return { id, name: text };
+        }
+      }
+      throw new Error('No results found for: ' + query);
+    }
+
+    const data = await resp.json();
+    const elements = data.elements || [];
+
+    if (!elements.length) throw new Error('No results found for: ' + query);
+
+    // Return the best match (first result)
+    const match = elements[0];
+    const id = match.id?.replace(/[^0-9]/g, '') || match.id || '';
+    const name = match.text || match.displayValue || match.name || query;
+
+    return { id, name };
   }
 })();

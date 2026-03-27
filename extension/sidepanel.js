@@ -12,6 +12,7 @@ let state = {
   currentPage: 1,
   currentCompanyIdx: 0,
   tabId: null,
+  resolvedLocations: {}, // cache: name -> { id, name }
 };
 
 // DOM refs
@@ -50,6 +51,7 @@ els.btnStop.addEventListener('click', stopExtraction);
 $('#btnExportCompanies').addEventListener('click', () => exportCSV('companies'));
 $('#btnExportPeople').addEventListener('click', () => exportCSV('people'));
 $('#btnClearData').addEventListener('click', clearData);
+$('#btnResolve').addEventListener('click', resolveAllLocations);
 
 // Listen for tab updates
 chrome.runtime.onMessage.addListener((message) => {
@@ -62,10 +64,19 @@ chrome.runtime.onMessage.addListener((message) => {
 
 async function startExtraction() {
   const keywords = parseLines(els.keywords.value);
-  const locations = parseLocations(els.locations.value);
 
   if (!keywords.length) { log('No keywords provided', 'error'); return; }
-  if (!locations.length) { log('No locations provided', 'error'); return; }
+
+  els.progressSection.style.display = 'block';
+
+  // Get active tab first (needed for resolving locations)
+  const tab = await sendBg({ type: 'GET_ACTIVE_TAB' });
+  if (!tab?.tabId) { log('No active tab found. Open LinkedIn Sales Navigator first.', 'error'); return; }
+  state.tabId = tab.tabId;
+
+  // Auto-resolve locations if needed
+  const locations = await resolveAndGetLocations();
+  if (!locations.length) { log('No valid locations. Resolve location IDs first.', 'error'); return; }
 
   state.running = true;
   state.paused = false;
@@ -75,12 +86,6 @@ async function startExtraction() {
   state.currentCompanyIdx = 0;
 
   updateButtons();
-  els.progressSection.style.display = 'block';
-
-  // Get active tab
-  const tab = await sendBg({ type: 'GET_ACTIVE_TAB' });
-  if (!tab?.tabId) { log('No active tab found. Open LinkedIn Sales Navigator first.', 'error'); stopExtraction(); return; }
-  state.tabId = tab.tabId;
 
   log('Starting extraction...', 'success');
 
@@ -363,7 +368,8 @@ function saveData() {
 }
 
 function loadData() {
-  chrome.storage.local.get(['companies', 'people'], (data) => {
+  chrome.storage.local.get(['companies', 'people', 'resolvedLocations'], (data) => {
+    state.resolvedLocations = data.resolvedLocations || {};
     state.companies = data.companies || [];
     state.people = data.people || [];
     els.companyCount.textContent = state.companies.length;
@@ -444,9 +450,97 @@ function parseLines(text) {
 
 function parseLocations(text) {
   return parseLines(text).map(line => {
-    const parts = line.split('|');
-    return { id: parts[0].trim(), name: parts[1]?.trim() || parts[0].trim() };
+    // Support both "ID|Name" and plain "Name" formats
+    if (line.includes('|')) {
+      const parts = line.split('|');
+      return { id: parts[0].trim(), name: parts[1]?.trim() || parts[0].trim() };
+    }
+    // Check if already resolved in cache
+    const cached = state.resolvedLocations[line.toLowerCase()];
+    if (cached) return { id: cached.id, name: cached.name };
+    // Return without ID — needs resolution
+    return { id: '', name: line.trim() };
   });
+}
+
+// ---- Location Resolution ----
+
+async function resolveAllLocations() {
+  const statusEl = $('#resolveStatus');
+  const names = parseLines(els.locations.value);
+
+  if (!names.length) { statusEl.innerHTML = '<span class="failed">No locations entered</span>'; return; }
+
+  // Need active tab for API calls
+  const tab = await sendBg({ type: 'GET_ACTIVE_TAB' });
+  if (!tab?.tabId) {
+    statusEl.innerHTML = '<span class="failed">Open LinkedIn Sales Navigator first, then resolve</span>';
+    return;
+  }
+  state.tabId = tab.tabId;
+
+  statusEl.innerHTML = '<span class="pending">Resolving...</span>';
+  const results = [];
+
+  for (const rawName of names) {
+    const name = rawName.includes('|') ? rawName.split('|')[1]?.trim() || rawName : rawName.trim();
+    const idFromLine = rawName.includes('|') ? rawName.split('|')[0]?.trim() : '';
+
+    // Already has ID
+    if (idFromLine && /^\d+$/.test(idFromLine)) {
+      results.push({ input: rawName, id: idFromLine, name, ok: true });
+      state.resolvedLocations[name.toLowerCase()] = { id: idFromLine, name };
+      continue;
+    }
+
+    // Check cache
+    if (state.resolvedLocations[name.toLowerCase()]) {
+      const cached = state.resolvedLocations[name.toLowerCase()];
+      results.push({ input: rawName, id: cached.id, name: cached.name, ok: true });
+      continue;
+    }
+
+    // Resolve via LinkedIn API
+    const resp = await sendToContent('RESOLVE_LOCATION', { locationName: name });
+    if (resp?.ok && resp.data?.id) {
+      results.push({ input: rawName, id: resp.data.id, name: resp.data.name, ok: true });
+      state.resolvedLocations[name.toLowerCase()] = { id: resp.data.id, name: resp.data.name };
+    } else {
+      results.push({ input: rawName, id: '', name, ok: false, error: resp?.error || 'Not found' });
+    }
+
+    // Small delay between API calls
+    await delay(500);
+  }
+
+  // Update textarea with resolved IDs
+  const newLines = results.map(r => r.ok ? `${r.id}|${r.name}` : r.input);
+  els.locations.value = newLines.join('\n');
+
+  // Show status
+  const resolved = results.filter(r => r.ok).length;
+  const failed = results.filter(r => !r.ok);
+  let html = `<span class="resolved">${resolved}/${results.length} resolved</span>`;
+  if (failed.length) {
+    html += '<br>' + failed.map(f => `<span class="failed">Not found: ${f.name}</span>`).join('<br>');
+  }
+  statusEl.innerHTML = html;
+
+  // Save cache
+  chrome.storage.local.set({ resolvedLocations: state.resolvedLocations });
+}
+
+async function resolveAndGetLocations() {
+  const locations = parseLocations(els.locations.value);
+  const unresolved = locations.filter(l => !l.id);
+
+  if (unresolved.length) {
+    log(`Resolving ${unresolved.length} location(s)...`, 'info');
+    await resolveAllLocations();
+    return parseLocations(els.locations.value).filter(l => l.id);
+  }
+
+  return locations.filter(l => l.id);
 }
 
 function extractCountry(location) {

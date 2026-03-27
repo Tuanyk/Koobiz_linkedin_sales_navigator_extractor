@@ -95,6 +95,25 @@ textarea:focus, input:focus, select:focus {
   opacity: 0.85;
 }
 
+.btn-resolve {
+  background: #057642;
+  color: #fff;
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px;
+  font-size: 11px;
+}
+
+.resolve-status {
+  margin-top: 4px;
+  font-size: 11px;
+  min-height: 16px;
+}
+
+.resolve-status .resolved { color: #057642; }
+.resolve-status .failed { color: #cc1016; }
+.resolve-status .pending { color: #e7a33e; }
+
 .btn-primary { background: #0a66c2; color: #fff; }
 .btn-warning { background: #e7a33e; color: #fff; }
 .btn-success { background: #057642; color: #fff; }

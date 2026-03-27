@@ -19,8 +19,10 @@
       </div>
 
       <div class="field">
-        <label for="locations">Locations <span class="hint">(ID|Name, one per line)</span></label>
-        <textarea id="locations" rows="4" placeholder="105072130|Poland&#10;101165590|United Kingdom">105072130|Poland</textarea>
+        <label for="locations">Locations <span class="hint">(just names, one per line)</span></label>
+        <textarea id="locations" rows="4" placeholder="Poland&#10;United Kingdom&#10;Germany">Poland</textarea>
+        <button id="btnResolve" class="btn btn-resolve">Resolve Location IDs</button>
+        <div id="resolveStatus" class="resolve-status"></div>
       </div>
 
       <div class="field">
