@@ -7,6 +7,7 @@
       EXTRACT_SEARCH_RESULTS: extractSearchResults,
       EXTRACT_COMPANY_DETAIL: extractCompanyDetail,
       EXTRACT_DECISION_MAKERS: extractDecisionMakers,
+      EXTRACT_PERSON_LINKEDIN_URL: extractPersonLinkedInUrl,
       CLICK_COMPANY: clickCompany,
       CLICK_DECISION_MAKERS_LINK: clickDecisionMakersLink,
       CLICK_NEXT_PAGE: clickNextPage,
@@ -166,6 +167,97 @@
     return { people };
   }
 
+  async function extractPersonLinkedInUrl() {
+    // Extract lead ID from current URL: /sales/lead/ACwAABuumtoBUo...,NAME_SEARCH,...
+    const url = window.location.href;
+    const leadMatch = url.match(/\/sales\/lead\/([^,?]+)/);
+    if (!leadMatch) return { linkedinUrl: '' };
+
+    const leadId = leadMatch[1];
+
+    // Try clicking the three-dot overflow menu to get "Copy LinkedIn.com URL"
+    const overflowBtn = document.querySelector(
+      'button[data-x--lead-actions-bar-overflow-menu]'
+    );
+
+    if (overflowBtn) {
+      overflowBtn.click();
+      // Wait for menu to render
+      await new Promise(r => setTimeout(r, 800));
+
+      // Look for "Copy LinkedIn.com URL" or similar menu item
+      const menuItems = document.querySelectorAll(
+        '[id^="hue-menu-ember"] button, [id^="hue-menu-ember"] a, [role="menuitem"]'
+      );
+      for (const item of menuItems) {
+        const text = item.textContent?.toLowerCase() || '';
+        if (text.includes('copy linkedin') || text.includes('linkedin.com url') || text.includes('copy profile')) {
+          item.click();
+          await new Promise(r => setTimeout(r, 500));
+
+          // Read from clipboard
+          try {
+            const clipText = await navigator.clipboard.readText();
+            if (clipText?.includes('linkedin.com/in/')) {
+              // Close menu
+              overflowBtn.click();
+              return { linkedinUrl: clipText.trim() };
+            }
+          } catch (e) {
+            console.log('[LI-Extractor] Clipboard read failed:', e.message);
+          }
+        }
+      }
+      // Close menu if still open
+      document.body.click();
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    // Fallback: try the Sales Navigator API
+    const csrfToken = document.cookie
+      .split('; ')
+      .find(c => c.startsWith('JSESSIONID='))
+      ?.split('=')
+      ?.slice(1)
+      ?.join('=')
+      ?.replace(/"/g, '');
+
+    const headers = {
+      'accept': 'application/json',
+      'x-restli-protocol-version': '2.0.0',
+    };
+    if (csrfToken) headers['csrf-token'] = csrfToken;
+
+    try {
+      const apiUrl = `https://www.linkedin.com/sales-api/salesApiProfiles/(profileId:${leadId})?decoration=%28flagshipProfileUrl%29`;
+      console.log('[LI-Extractor] Fetching profile URL:', apiUrl);
+      const resp = await fetch(apiUrl, { headers, credentials: 'include' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.flagshipProfileUrl) {
+          return { linkedinUrl: data.flagshipProfileUrl };
+        }
+      }
+    } catch (e) {
+      console.log('[LI-Extractor] Profile API failed:', e.message);
+    }
+
+    // Fallback: try another API pattern
+    try {
+      const apiUrl2 = `https://www.linkedin.com/sales-api/salesApiLeadLookup?q=leadId&leadId=${leadId}&decoration=%28flagshipProfileUrl%29`;
+      const resp2 = await fetch(apiUrl2, { headers, credentials: 'include' });
+      if (resp2.ok) {
+        const data2 = await resp2.json();
+        const profileUrl = data2.flagshipProfileUrl || data2.elements?.[0]?.flagshipProfileUrl;
+        if (profileUrl) return { linkedinUrl: profileUrl };
+      }
+    } catch (e) {
+      console.log('[LI-Extractor] Lead lookup API failed:', e.message);
+    }
+
+    return { linkedinUrl: '' };
+  }
+
   function clickCompany(message) {
     const links = document.querySelectorAll(
       'a[data-control-name="view_company_via_result_name"], ' +
@@ -225,54 +317,39 @@
     const query = message.locationName;
     if (!query) throw new Error('No location name provided');
 
-    // Get CSRF token from cookie
+    // Get CSRF token from cookies — LinkedIn uses JSESSIONID with quotes
     const csrfToken = document.cookie
       .split('; ')
       .find(c => c.startsWith('JSESSIONID='))
-      ?.split('=')[1]
+      ?.split('=')
+      ?.slice(1)
+      ?.join('=')
       ?.replace(/"/g, '');
 
-    const headers = {
+    const baseHeaders = {
       'accept': 'application/json',
       'x-restli-protocol-version': '2.0.0',
     };
     if (csrfToken) {
-      headers['csrf-token'] = csrfToken;
+      baseHeaders['csrf-token'] = csrfToken;
     }
 
-    // Try Sales Navigator typeahead API
-    const url = `https://www.linkedin.com/sales-api/salesApiTypeahead?q=typeahead&query=${encodeURIComponent(query)}&type=REGION`;
+    const url = `https://www.linkedin.com/sales-api/salesApiFacetTypeahead?q=query&start=0&count=10&type=BING_GEO&query=${encodeURIComponent(query.toLowerCase())}`;
 
-    const resp = await fetch(url, { headers, credentials: 'include' });
+    console.log('[LI-Extractor] Resolving:', url);
+    const resp = await fetch(url, { headers: baseHeaders, credentials: 'include' });
 
-    if (!resp.ok) {
-      // Fallback: try the regular LinkedIn API
-      const fallbackUrl = `https://www.linkedin.com/voyager/api/typeahead/hitsV2?keywords=${encodeURIComponent(query)}&origin=GLOBAL_SEARCH_HEADER&q=blended&type=GEO`;
-      const resp2 = await fetch(fallbackUrl, { headers, credentials: 'include' });
-      if (!resp2.ok) throw new Error(`API returned ${resp2.status}`);
-
-      const data2 = await resp2.json();
-      const elements = data2.elements || data2.included || [];
-      for (const el of elements) {
-        const text = el.text?.text || el.title?.text || el.name || '';
-        const id = el.targetUrn?.split(':')?.pop() || el.objectUrn?.split(':')?.pop() || '';
-        if (text && id) {
-          return { id, name: text };
-        }
-      }
-      throw new Error('No results found for: ' + query);
-    }
+    if (!resp.ok) throw new Error(`API returned ${resp.status}`);
 
     const data = await resp.json();
     const elements = data.elements || [];
 
     if (!elements.length) throw new Error('No results found for: ' + query);
 
-    // Return the best match (first result)
+    // First element is best match
     const match = elements[0];
-    const id = match.id?.replace(/[^0-9]/g, '') || match.id || '';
-    const name = match.text || match.displayValue || match.name || query;
+    console.log('[LI-Extractor] Resolved:', match.id, match.displayValue);
 
-    return { id, name };
+    return { id: String(match.id), name: match.displayValue || query };
   }
 })();

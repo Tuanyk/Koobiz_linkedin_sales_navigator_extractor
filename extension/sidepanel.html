@@ -15,39 +15,37 @@
     <section class="config-section">
       <div class="field">
         <label for="keywords">Keywords <span class="hint">(one per line)</span></label>
-        <textarea id="keywords" rows="4" placeholder="Company incorporation&#10;Business consulting&#10;Tax advisory">Company incorporation</textarea>
+        <textarea id="keywords" rows="3" placeholder="Company incorporation&#10;Business consulting&#10;Tax advisory">Company incorporation</textarea>
       </div>
 
       <div class="field">
-        <label for="locations">Locations <span class="hint">(just names, one per line)</span></label>
-        <textarea id="locations" rows="4" placeholder="Poland&#10;United Kingdom&#10;Germany">Poland</textarea>
-        <button id="btnResolve" class="btn btn-resolve">Resolve Location IDs</button>
-        <div id="resolveStatus" class="resolve-status"></div>
+        <label for="locations">Locations <span class="hint">(one per line)</span></label>
+        <textarea id="locations" rows="3" placeholder="Poland&#10;United Kingdom&#10;Germany">Poland</textarea>
       </div>
 
-      <div class="field">
-        <label for="headcount">Company Headcount</label>
-        <select id="headcount">
-          <option value="A">Self-employed (1)</option>
-          <option value="B">1-10</option>
-          <option value="C" selected>11-50</option>
-          <option value="D">51-200</option>
-          <option value="E">201-500</option>
-          <option value="F">501-1000</option>
-          <option value="G">1001-5000</option>
-          <option value="H">5001-10000</option>
-          <option value="I">10001+</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="delay">Delay between actions <span class="hint">(seconds)</span></label>
-        <input type="number" id="delay" value="3" min="1" max="30">
-      </div>
-
-      <div class="field">
-        <label for="maxPages">Max pages per search</label>
-        <input type="number" id="maxPages" value="5" min="1" max="100">
+      <div class="field-row">
+        <div class="field">
+          <label for="headcount">Headcount</label>
+          <select id="headcount">
+            <option value="A">1</option>
+            <option value="B">1-10</option>
+            <option value="C" selected>11-50</option>
+            <option value="D">51-200</option>
+            <option value="E">201-500</option>
+            <option value="F">501-1000</option>
+            <option value="G">1001-5000</option>
+            <option value="H">5001-10000</option>
+            <option value="I">10001+</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="delay">Delay (s)</label>
+          <input type="number" id="delay" value="3" min="1" max="30">
+        </div>
+        <div class="field">
+          <label for="maxPages">Max pages</label>
+          <input type="number" id="maxPages" value="5" min="1" max="100">
+        </div>
       </div>
     </section>
 
@@ -63,9 +61,7 @@
         <div><strong>Status:</strong> <span id="statusText">Idle</span></div>
         <div><strong>Keyword:</strong> <span id="currentKeyword">-</span></div>
         <div><strong>Location:</strong> <span id="currentLocation">-</span></div>
-        <div><strong>Page:</strong> <span id="currentPage">-</span></div>
-        <div><strong>Companies:</strong> <span id="companyCount">0</span></div>
-        <div><strong>People:</strong> <span id="peopleCount">0</span></div>
+        <div><strong>Page:</strong> <span id="currentPage">-</span> | <strong>Companies:</strong> <span id="companyCount">0</span> | <strong>People:</strong> <span id="peopleCount">0</span></div>
       </div>
       <div class="log-container">
         <div id="log" class="log"></div>
@@ -73,36 +69,20 @@
     </section>
 
     <section class="export-section">
-      <button id="btnExportCompanies" class="btn btn-export">Export Companies CSV</button>
-      <button id="btnExportPeople" class="btn btn-export">Export People CSV</button>
-      <button id="btnClearData" class="btn btn-clear">Clear All Data</button>
+      <button id="btnExportCSV" class="btn btn-export">Export CSV</button>
+      <button id="btnClearData" class="btn btn-clear">Clear Data</button>
     </section>
 
     <section class="data-section">
-      <h3>Extracted Companies (<span id="tableCompanyCount">0</span>)</h3>
+      <h3>Results (<span id="tableCount">0</span>)</h3>
       <div class="table-container">
-        <table id="companiesTable">
+        <table id="resultsTable">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Employees</th>
-              <th>Country</th>
-              <th>Industry</th>
-              <th>Website</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <h3>Decision Makers (<span id="tablePeopleCount">0</span>)</h3>
-      <div class="table-container">
-        <table id="peopleTable">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Title</th>
               <th>Company</th>
+              <th>Contact</th>
+              <th>Title</th>
+              <th>Country</th>
             </tr>
           </thead>
           <tbody></tbody>

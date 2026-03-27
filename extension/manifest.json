@@ -5,6 +5,7 @@
   "description": "Extract company and decision maker data from LinkedIn Sales Navigator",
   "permissions": [
     "activeTab",
+    "scripting",
     "sidePanel",
     "storage",
     "tabs"

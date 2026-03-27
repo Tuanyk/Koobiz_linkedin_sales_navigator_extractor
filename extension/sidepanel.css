@@ -95,24 +95,14 @@ textarea:focus, input:focus, select:focus {
   opacity: 0.85;
 }
 
-.btn-resolve {
-  background: #057642;
-  color: #fff;
-  width: 100%;
-  margin-top: 6px;
-  padding: 6px;
-  font-size: 11px;
+.field-row {
+  display: flex;
+  gap: 8px;
 }
 
-.resolve-status {
-  margin-top: 4px;
-  font-size: 11px;
-  min-height: 16px;
+.field-row .field {
+  flex: 1;
 }
-
-.resolve-status .resolved { color: #057642; }
-.resolve-status .failed { color: #cc1016; }
-.resolve-status .pending { color: #e7a33e; }
 
 .btn-primary { background: #0a66c2; color: #fff; }
 .btn-warning { background: #e7a33e; color: #fff; }
@@ -177,6 +167,8 @@ textarea:focus, input:focus, select:focus {
 .log .log-entry.info { color: #0a66c2; }
 
 .export-section {
+  display: flex;
+  gap: 6px;
   margin-bottom: 10px;
 }
 
